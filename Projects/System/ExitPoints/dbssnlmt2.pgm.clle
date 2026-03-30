@@ -1,0 +1,32 @@
+
+/*--------------------------------------------------------------------------*/
+/*                                                                          */ 
+/* QIBM_QZDA_INIT exit point exit program                                   */
+/*                                                                          */
+/* Dates: 2026/03/30 Creation                                               */
+/*                                                                          */
+/* We do not use the INPUTDATA parameter here, but it is required by the    */
+/* the exit point.                                                          */
+/*                                                                          */
+/*--------------------------------------------------------------------------*/
+
+PGM PARM(&FLAG &INPUTDATA)
+
+DCLPRCOPT DFTACTGRP(*NO) ACTGRP(*NEW)
+
+DCL VAR(&FLAG) TYPE(*CHAR) LEN(1)
+DCL VAR(&INPUTDATA) TYPE(*CHAR) LEN(285)
+
+DCL VAR(&DATA) TYPE(*CHAR) LEN(80)
+DCL VAR(&PGMLIB) TYPE(*CHAR) LEN(10)
+
+CHGVAR VAR(%BIN(&DATA 1 4)) VALUE(80)
+CHGVAR VAR(%BIN(&DATA 5 4)) VALUE(80)
+CHGVAR VAR(%BIN(&DATA 9 4)) VALUE(0)
+CHGVAR VAR(%BIN(&DATA 13 4)) VALUE(0)
+CALLPRC PRC('_MATPGMNM') PARM((&DATA))
+CHGVAR VAR(&PGMLIB) VALUE(%SST(&DATA 19 10))
+
+CALL PGM(&PGMLIB/DBSSNLMT) PARM(&FLAG)
+
+ENDPGM
