@@ -5,21 +5,16 @@
 // The goal of this program is to check whether or not the count of         */
 // database connections for the current user is over a defined limit.       */
 // It is intended to be used as an exit program of the QIBM_QZDA_INIT exit  */  
-// point.                                                                   */
-// Once created, it has to be registered with the command:                  */
-// ADDEXITPGM EXITPNT(QIBM_QZDA_INIT) FORMAT(ZDAI0100) PGMNBR(*LOW)         */
-//            PGM(yourlib/DBSSNLMT) TEXT('Limit DB connections per user')   */
+// point, and DDMACC network attribute exit program.                        */
 //                                                                          */
 // Output parameter: Flag to allow or reject                                */
-// Input parameter:  ZDAI0100 format structure                              */
 //                                                                          */
 // Dates: 2026/03/18 Creation                                               */
-//                                                                          */
-// Based on https://www.ibm.com/docs/en/i/7.5.0?topic=administration-use-server-exit-programs */
+//        2026/03/30 https://github.com/MarcoDeSenas/IBMi-topics-thanks-to-pub400/issues/106  */
 //                                                                          */
 //--------------------------------------------------------------------------*/
 
-ctl-opt option(*srcstmt:*nodebugio) actgrp(*NEW);
+ctl-opt option(*srcstmt:*nodebugio) actgrp(*caller);
 ctl-opt main(Main);
 
 dcl-c OpenBracket '(';
@@ -48,10 +43,7 @@ dcl-s Char1                                         char(1);
 dcl-proc Main;
     dcl-pi *n;
         OutFlag                                     like(Char1);
-        InZDAI0100                                  like(EZDQIF)                    const;
     end-pi;
-
-/COPY /QSYS.LIB/QSYSINC.LIB/QRPGLESRC.FILE/EZDAEP.MBR
 
     dcl-c Localhost '127.0.0.1';
     dcl-c DefaultAcceptQ 'Y';
@@ -76,8 +68,7 @@ dcl-proc Main;
     dcl-s SQLstmt                                   char(1024)                      inz;
     dcl-s MessageData                               char(132)                       inz;
     dcl-s MessageDataLength                         int(10)                         inz;
-
-    EZDQIF = InZDAI0100;
+    dcl-s UserProfile                               char(10)                        inz;
 
 //--------------------------------------------------------------------------*/
 //                                                                          */
@@ -159,6 +150,18 @@ dcl-proc Main;
 
 //--------------------------------------------------------------------------*/
 //                                                                          */
+// Retrieve user profile.                                                   */
+//                                                                          */
+//--------------------------------------------------------------------------*/
+
+    SQLstmt = 'VALUES current user';
+    SQLstmt = %trim(SQLstmt) + ' INTO ?';
+
+    exec sql PREPARE RetrieveUserProfile FROM :SQLstmt;
+    exec sql EXECUTE RetrieveUserProfile USING :UserProfile;
+
+//--------------------------------------------------------------------------*/
+//                                                                          */
 // User profile checking in regard to DATABASE_LIMIT_ALLWAYSACCEPTQ content.*/
 // If this environment variable is Y for Yes and the user profile is Q*, we */
 // accept the connection regardless the count of active sessions, and we    */
@@ -166,7 +169,7 @@ dcl-proc Main;
 //                                                                          */
 //--------------------------------------------------------------------------*/
 
-    if (AcceptQ = Yes and %subst(EZDUP : 1 : 1) = 'Q');
+    if (AcceptQ = Yes and %subst(UserProfile : 1 : 1) = 'Q');
         snd-msg *INFO %msg('CPI3701' : 'QCPFMSG' : 'Database access accepted as a system user profile') %target(*SELF);
         OutFlag = AcceptFlag;
     else;
@@ -214,7 +217,7 @@ dcl-proc Main;
 
         if (CurrentSessions >= MaxSessions);
             snd-msg *DIAG %msg('CPI3701' : 'QCPFMSG' : 'Database access rejected per rules') %target(*SELF);
-            MessageData = 'Database access rejected for ' + %trim(EZDUP) + ' with ' + %char(CurrentSessions) + ' active sessions';
+            MessageData = 'Database access rejected for ' + %trim(UserProfile) + ' with ' + %char(CurrentSessions) + ' active sessions';
             MessageDataLength = %len(%trim(MessageData));
             exec sql CALL QSYS2.SEND_MESSAGE(
                     MESSAGE_ID => 'CPD436F',
